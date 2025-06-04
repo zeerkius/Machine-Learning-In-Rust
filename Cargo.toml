@@ -1,0 +1,8 @@
+[package]
+name = "first_rustfile"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+polars = {version = "0.48.1" ,features = ["csv"]}
+ordered-float = "5.0.0"
