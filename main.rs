@@ -1,104 +1,95 @@
-use polars::prelude::*;
-use polars::prelude::CsvReader;
-use std::fs::File;
-use std::error::Error;
-use ordered_float::OrderedFloat;
-use std::collections::HashSet;
-pub fn dist(d:Vec<f64>,q:Vec<f64>) -> Result<f64, String>{
-    if d.len() != q.len(){
-        return Err("vectors must be same size".to_string());
-    }
-    let mut dist : f64 = 0.0;
-    let length = d.len() - 1;
-    for i in 0..length{
-    dist += (d[i] - q[i]).powi(2);
-    }
-    dist = dist.sqrt();
-    Ok(dist)
+// This is a rust implementation of a Linear Regression Model
+// We need a struct to Define Training / Testing Data
+struct Data{
+    X_train : Vec<Vec<f64>>,
+    Y_train : Vec<f64>,
+    X_test : Vec<Vec<f64>>,
+    Y_test : Vec<f64>,
 }
 
-pub fn load_data(path: &str) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
-    let file = File::open(path)?;
-    let df = CsvReader::new(file)
-        .finish()?;
-
-    let height = df.height();
-    let width = df.width();
-
-    let mut rows = Vec::with_capacity(height);
-
-    for i in 0..height {
-        let row = Vec::with_capacity(width);
-        for col in df.get_columns() {
-            let val = match col.dtype() {
-                DataType::Float64 => col.f64()?.get(i),
-                DataType::Int64 => col.i64()?.get(i).map(|v| v as f64),
-                DataType::Int32 => col.i32()?.get(i).map(|v| v as f64),
-                _ => Some(f64::NAN), // fallback for unsupported types
-            };
+struct LRModel; // Meaning it has a type of LRModel , similarly in python it will have a type of the class name
+// The Model Will only support SSE
+impl LRModel{
+    fn dot_product(&self,u:&Vec<f64>,v:&Vec<f64>)->Result<f64,String>{
+        // handle errors of invalid length
+        if u.len() != v.len(){
+            return Err("Invalid Vector Length".to_string());
+        }else{
+            let length : usize = u.len();
+            let mut dot_prod : f64 = 0.0;
+            for i in 0..length{
+                dot_prod += (u[i] * v[i]);
+            }
+            Ok(dot_prod) // preferred return type
         }
-        rows.push(row);
     }
-    Ok(rows)
-}
-// this will splice the vector from the feature and target value
-pub fn partition_nested(nested:Vec<Vec<f64>>) -> (Vec<Vec<f64>>,Vec<f64>){
-    let length = nested[0].len() - 1;
-    let mut feature_vector : Vec<Vec<f64>> = Vec::new();
-    let mut ground_truth = Vec::new();
-    // assuming we have preprocessed with target feature at the end of dataframe
-    // also assuming categorical targets to use for hashmap
-    for arr in nested{
-        feature_vector.push(arr[0..length].to_vec());
-        let ord = arr[length] as i32;
-        ground_truth.push(ord.into());
+    fn sse_gradient(&self,prediction : f64 , ground_truth : f64 , xi : f64) -> f64{
+        // we purposely omit the constant
+        let delta : f64 = (prediction - ground_truth) * xi;
+        delta
     }
-    (feature_vector,ground_truth)
-}
-
-
-pub fn fit(x: Vec<Vec<f64>>,y:Vec<i32> ,k :usize ,q:Vec<f64>)->Result<i32,String>{
-    if k < 3{
-        return Err("k must be at least 3".to_string());
-    }else if q.len() != x[0].len(){
-        return Err("query length must be the same size as feature record".to_string());
-    }else if x.is_empty() || y.is_empty(){
-        return Err("either feature or target vector is empty".to_string());
-    }else{
-        let mut counter : usize = 0;
-        let mut seen = Vec::new();
-        for arr in x{
-            let distance = dist(arr,q.clone())?;
-            seen.push(vec![OrderedFloat(distance),y[counter].into()]);
-            counter += 1; // iterates through all targets
+    
+    fn sse(&self,prediction : f64 , ground_truth: f64)  -> f64{
+        let err : f64 = (prediction - ground_truth).powi(2);
+        err
+    }
+    
+    fn fit(&self,X:Vec<Vec<f64>>,Y:Vec<f64>, batch_size : i32 , epochs : i32) -> Result<Vec<f64>,String>{
+        let length_input_vector : usize = X[0].len();
+        let length_training_data : usize = X.len();
+        let length_ground_truth: usize = Y.len();
+        if length_ground_truth == length_training_data{
+            return Err("Incompatible Data Size {Not enough ground truth for given examples} ".to_string());
         }
-        // sort values to get smallest distances
-        seen.sort(); //merge sort O(nlogn)
-        let mut set = HashSet::new();
-        let mut common = Vec::new();
-        for h in 0..k{
-            common.push(seen[h][1].into_inner() as i32); // order float must change
-            set.insert(seen[h][1].into_inner() as i32);
-        }
-        let mut res :i32 = 0;
-        let mut m :i32 = 0;
-        for p in set.iter(){
-            let mut count : i32 = 0;
-            for a in common.iter(){
-                if a == p {
-                    count += 1;
+        let learning_rate : f64 = 0.000005; // moving the delta
+        let beta : f64 = 0.3; // momentum-optimized gradient
+        let mut velocity : f64 = 0.0;
+        let mut weight_vector = vec![0.5;length_input_vector]; // this needs to be dynamically created based on input shape , also initialized at 0.5
+        let mut error_cache : Vec<Vec<f64>> = (0..length_input_vector).map(|_| Vec::new()).collect(); // making empty vector to record error
+        let mut batch_counter :i32 = 0;
+        // iterate through the dataset for the amount of epochs the user wants
+        // when batch size accumulate update weights
+        // otherwise use weights for predictions
+        for i in 0..epochs{
+            for j in 0..length_training_data{
+                batch_counter += 1;
+                if batch_counter % batch_size == 0{ // avoid manual expensive copying and counting
+                    // weight update
+                    for k in 0..length_input_vector{
+                        let mut sum : f64 = error_cache[k].iter().sum(); // avoid type ref
+                        velocity += (1.0 - beta) * sum * (1.0 / batch_size as f64);
+                        weight_vector[k] -= velocity * learning_rate
+                    }
+                    let mut error_cache : Vec<Vec<i32>> = (0..length_input_vector).map(|_| Vec::new()).collect(); //shadows and avoids moving errors
+                }else{
+                    let mut yi : f64 = self.dot_product(&weight_vector,&X[j]).unwrap(); // point to values to avoid moving errors
+                    for n in 0..length_input_vector{
+                        error_cache[j].push(self.sse_gradient(yi,Y[j],X[j][n]))
+                    }
                 }
             }
-            if count > m{
-                m = count;
-                res = *p;
-            }
         }
-        Ok(res)
+        Ok(weight_vector)
+    }
+    
+    fn predict(&self,X:Vec<Vec<f64>>,Y:Vec<f64> , trained_weights : &Vec<f64>) -> Vec<f64>{
+        let mut predictions : Vec<f64> = Vec::new();
+        let mut test_data_length : usize = X.len();
+        for m in 0..test_data_length{
+            let arr : &Vec<f64> = &X[m]; // cast splice -> vec pointer to avoid errors with dot product function
+            let mut p : f64 = self.dot_product(arr,trained_weights).unwrap();
+            predictions.push(p);
+        }
+        let p_sum : f64 = predictions.iter().sum();
+        let ground_truth_sum : f64 = Y.iter().sum();
+        let total_error : f64 = self.sse(p_sum,ground_truth_sum);
+        println!(" Model Sum Of Squared Error {} ",total_error);
+        predictions
     }
 }
+
+
 fn main() {
-    // k-nn usage
-    // load csv file , preferably preprocessed for blanks and target features at the end
-    // then iterate through result values and fit using new record ,and different k values
+    // Needs testing with loading data
+
 }
