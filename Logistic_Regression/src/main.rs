@@ -80,6 +80,7 @@ impl LogisticRegression{
         let test_vector_size : usize = X.len();
         for i in 0..test_vector_size{
             let mut guess : f64 = self.dot_product(&W,&X[i]).unwrap();
+            let mut guess : f64 = self.sigmoid(guess);
             predictions.push(guess);
         }
         let pred_sum : f64 = predictions.iter().sum();
