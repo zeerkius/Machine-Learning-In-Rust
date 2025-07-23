@@ -1,5 +1,10 @@
 // This is a rust implementation of a Linear Regression Model
 // We need a struct to Define Training / Testing Data
+use std::collections::HashSet;
+use ordered_float::NotNan;
+use serde::Deserialize;
+use csv::ReaderBuilder;
+use std::error::Error;
 struct Data{
     X_train : Vec<Vec<f64>>,
     Y_train : Vec<f64>,
@@ -34,12 +39,12 @@ impl LRModel{
         err
     }
     
-    fn fit(&self,X:Vec<Vec<f64>>,Y:Vec<f64>, batch_size : i32 , epochs : i32) -> Result<Vec<f64>,String>{
+    fn fit(&self,X:&Vec<Vec<f64>>,Y:Vec<f64>, batch_size : i32 , epochs : i32) -> Result<Vec<f64>,String>{
         let length_input_vector : usize = X[0].len();
         let length_training_data : usize = X.len();
         let length_ground_truth: usize = Y.len();
-        if length_ground_truth == length_training_data{
-            return Err("Incompatible Data Size {Not enough ground truth for given examples} ".to_string());
+        if length_ground_truth != length_training_data{
+            return Err("Incompatible Data Size Not enough ground truth for given examples".to_string());
         }
         if batch_size <= 0{
             return Err("Batch size must be greater than 0".to_string());
@@ -47,10 +52,10 @@ impl LRModel{
         if epochs <= 0{
             return Err("Epochs must be greater than 0".to_string());
         }
-        let learning_rate : f64 = 0.000005; // moving the delta
+        let learning_rate : f64 = 0.0000005; // moving the delta
         let beta : f64 = 0.3; // momentum-optimized gradient
         let mut velocity : f64 = 0.0;
-        let mut weight_vector = vec![0.5;length_input_vector]; // this needs to be dynamically created based on input shape , also initialized at 0.5
+        let mut weight_vector = vec![0.0;length_input_vector]; // this needs to be dynamically created based on input shape , also initialized at 0.5
         let mut error_cache : Vec<Vec<f64>> = (0..length_input_vector).map(|_| Vec::new()).collect(); // making empty vector to record error
         let mut batch_counter :i32 = 0;
         // iterate through the dataset for the amount of epochs the user wants
@@ -61,16 +66,17 @@ impl LRModel{
                 batch_counter += 1;
                 if batch_counter % batch_size == 0{ // avoid manual expensive copying and counting
                     // weight update
+                    println!("Current Weights {:?}",weight_vector);
                     for k in 0..length_input_vector{
                         let mut sum : f64 = error_cache[k].iter().sum(); // avoid type ref
-                        velocity += (1.0 - beta) * sum * (1.0 / batch_size as f64);
+                        velocity = (beta * velocity) +  (1.0 - beta) * sum;
                         weight_vector[k] -= velocity * learning_rate
                     }
                     let mut error_cache : Vec<Vec<i32>> = (0..length_input_vector).map(|_| Vec::new()).collect(); //shadows and avoids moving errors
                 }else{
                     let mut yi : f64 = self.dot_product(&weight_vector,&X[j]).unwrap(); // point to values to avoid moving errors
                     for n in 0..length_input_vector{
-                        error_cache[j].push(self.sse_gradient(yi,Y[j],X[j][n]))
+                        error_cache[n].push(self.sse_gradient(yi,Y[j],X[j][n]))
                     }
                 }
             }
@@ -89,13 +95,81 @@ impl LRModel{
         let p_sum : f64 = predictions.iter().sum();
         let ground_truth_sum : f64 = Y.iter().sum();
         let total_error : f64 = self.sse(p_sum,ground_truth_sum);
-        println!(" Model Sum Of Squared Error {} ",total_error);
+        println!(" Model Sum Of Squared Error {:?} ",total_error);
         predictions
     }
+}
+
+//define a struct for our csv file
+// using Deserialize in serde
+#[derive(Debug, Deserialize)]
+struct CancerCsv{
+    SMOKING:f64,
+    YELLOW_FINGERS:f64,
+    ANXIETY:f64,
+    PEER_PRESSURE:f64,
+    CHRONICDISEASE:f64,
+    FATIGUE:f64 ,
+    ALLERGY:f64 ,
+    WHEEZING:f64,
+    ALCOHOLCONSUMING:f64,
+    COUGHING:f64,
+    SHORTNESSOFBREATH:f64,
+    SWALLOWINGDIFFICULTY:f64,
+    CHESTPAIN:f64,
+    LUNG_CANCER:f64,
+}
+impl CancerCsv{
+    fn make_vec(&self) -> Vec<f64>{
+        vec![self.SMOKING,self.YELLOW_FINGERS,self.ANXIETY,self.PEER_PRESSURE,self.CHRONICDISEASE,self.FATIGUE,self.ALLERGY,self.WHEEZING,
+             self.ALCOHOLCONSUMING,self.COUGHING,self.SHORTNESSOFBREATH,self.SWALLOWINGDIFFICULTY,self.CHESTPAIN,self.LUNG_CANCER]
+    }
+    // we have to manually crate a vec for the struct
+
+
+
+
+}
+// this means we will load from a string path
+// data has been halved
+fn load_csv(file:&str) -> Result<Vec<Vec<f64>>,Box<dyn Error>>{
+    let mut rdr = ReaderBuilder::new().has_headers(true).from_path(file)?;
+    let mut rows : Vec<Vec<f64>> = Vec::new();
+
+    for result in rdr.deserialize(){
+        let row : CancerCsv = result?;
+        let act_row : Vec<f64> = row.make_vec();
+        rows.push(act_row);
+    }
+    Ok(rows)
+}
+
+fn target(X:&Vec<Vec<f64>>) -> Vec<f64>{
+    let row_len : usize = X[0].len();
+    // transpose to get the vectors column wise
+    let mut T : Vec<Vec<f64>> = Vec::new();
+    if let Some(row_len) = X.first().map(|row| row.len()){
+        T = (0..row_len).map(|i| X.iter().map(|row| row[i]).collect()).collect();
+    }
+    let res : Vec<f64> = T[row_len - 1].to_vec();
+    res
 }
 
 
 fn main() {
     // Needs testing with loading data
+    let model = LRModel;
+    let train_vec = load_csv("src/train.csv").expect("Error Loading File");
+    let test_vec = load_csv("src/test.csv").expect("Error Loading File");
+    let lung_cancer_train : Vec<f64> = target(&train_vec);
+    let weights = model.fit(&train_vec,lung_cancer_train,150,31).unwrap();
+    let lung_cancer_test : Vec<f64> = target(&test_vec);
+    let res : Vec<f64> = model.predict(test_vec,lung_cancer_test,&weights);
+    
+    
+    
+
+
+    
 
 }
