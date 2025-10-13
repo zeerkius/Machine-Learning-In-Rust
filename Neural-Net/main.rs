@@ -1,4 +1,5 @@
-
+// vector of the number of hidden layers we want to utilize -> hidden_layers
+// the amount of nodes per layer will be any usize value
 struct NeuralNet{
     hidden_layers:usize,
     nodes:Vec<usize>
@@ -6,7 +7,7 @@ struct NeuralNet{
 
 impl NeuralNet{
     // make the new
-    fn new(&self,hidden_layers: usize , nodes : Vec<usize>) -> Self{
+    fn new(hidden_layers: usize , nodes : Vec<usize>) -> Self{
         Self{
             hidden_layers,
             nodes,
@@ -42,7 +43,7 @@ impl NeuralNet{
             for j in 0..vector.len(){
                 ui += (vector[j] * matrix[j][i]);
             }
-            res_vector.push(ui);
+            res_vector.push(self.sigmoid(ui)); // every single perceptron will have a sigmoid activation
         }
         Ok(res_vector)
     }
@@ -86,18 +87,114 @@ impl NeuralNet{
         // weight_matrices includes all weight matrices in-between
         Ok((input_layers,weight_matrices))
     }
-    fn SGD(&self) -> Result<(Vec<Vec<f64>>,Vec<Vec<Vec<f64>>>),String>{
-        // first we have to feed foward in the network and change weights after a full network pass
-        
-        {}
+    /*
+    // Stochastic Gradient Descent
+    // this implementation will use Stochastic Gradient Descent , all activations will be sigmoid defined 
+    // this means our batch size will automatically be 1
+    // Sum of Squared Error Loss (y - y')^ 2
+    // We use Gradient Descent with momentum 
+    // Below rust pseudo code shows how we implemented the back propagation
+    // the model itself will be a serialized Impl that takes vectors and performs matrix operations and returns a prediction
+    // we call this prediction y'
+    
+        let learning_rate : f64 = 0.000005;
+        let beta : f64 = 0.3;
+        let mut velocity : f64 = 0.0;
+        let net = self.create_network(0.5,input_vec.clone()).expect("Invalid Network Architecture");
+        let input: Vec<Vec<f64>> = net.0;
+        let ln : Vec<f64> = input_vec.clone();
+        let mut matrices : Vec<Vec<Vec<f64>>> = net.1;
+        let mut input_track : Vec<Vec<f64>> = Vec::new();
+        if input.len() != matrices.len(){
+            return Err("Cannot compute Network".to_string());
+        }else{
+            // full network pass
+            for i in 0..matrices.len(){
+                let ln= self.matrix_multiplication(matrices[i].clone(),ln.clone()).expect("Invalid Size");
+                input_track.push(ln);
+            }
+            // full back propagation
+            for sigma in (0..input_track.len()).rev(){
+                for index in (0..input_track[sigma].len()).rev(){
+                    let mut weight_column_index : usize = 0;
+                    for weight_column in (0..matrices[sigma][index].len()).rev(){
+                        let weight_gradient : f64 = self.sse_sigmoid_gradient(ground_truth,input_track[sigma][weight_column_index],matrices[sigma][index][weight_column]);
+                        velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
+                        // then update w[i] = w[i] - velocity * learning rate
+                        matrices[sigma][index][weight_column] = matrices[sigma][weight_column_index][weight_column] - (velocity * learning_rate);
+                        weight_column_index += 1; 
+                        // this way each column will get the row wise output variable
+                        // {w_00(gradient-delta)xn , w_01(gradient-delta)xn-1 , w_02(gradient-delta)xn-2 ...... w_0n(gradient-delta)x1}
+                        // {w_10(gradient-delta)xn , w_11(gradient-delta)xn-1 , w_12(gradient-delta)xn-2 ...... w_1n(gradient-delta)x1}
+                        // {w_n0(gradient-delta)xn , w-n1(gradient-delta)xn-1 , w_n2(gradient-delta)xn-2 ...... w_nn(gradient-delta)x1}
+                    }
+                }
+            }
+            Ok((input,matrices))
+        }
         
     }
+     */
+    fn fit(&self,X:Vec<Vec<f64>>,Y:Vec<f64>,epochs : usize , weight_start : f64) -> Result<(Vec<Vec<f64>>,Vec<Vec<Vec<f64>>>),String>{
+        
+        let learning_rate : f64 = 0.000005;
+        let beta : f64 = 0.3;
+        let mut velocity : f64 = 0.0;
+        let network_shape : Vec<f64> = X[0].clone();
+        let net = self.create_network(weight_start,network_shape).expect("Invalid Network Architecture");
+        let input: Vec<Vec<f64>> = net.0;
+        let mut matrices : Vec<Vec<Vec<f64>>> = net.1;
+        let mut input_track : Vec<Vec<f64>> = Vec::new();
+        
+        if input.len() != matrices.len(){
+            return Err("Cannot compute Network".to_string());
+        }
+        for i in 0..epochs{
+            for j in 0..X.len(){
+                // full network pass
+                for k in 0..matrices.len(){
+                    let ln= self.matrix_multiplication(matrices[k].clone(),X[j].clone()).expect("Invalid Size");
+                    input_track.push(ln);
+                }
+                
+                let last_value = input_track[input_track.len()-1][0];
+                let model_error = self.sse(last_value,Y[j]);
+                println!(" Current Model Error {:?} ",model_error);
+                
+                // full back propagation
+                for sigma in (0..input_track.len()).rev(){
+                    for index in (0..input_track[sigma].len()).rev(){
+                        let mut weight_column_index : usize = 0;
+                        for weight_column in (0..matrices[sigma][index].len()).rev(){
+                            
+                            let weight_gradient : f64 = self.sse_sigmoid_gradient(Y[j],input_track[sigma][weight_column_index],matrices[sigma][index][weight_column]);
+                            velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
+                            
+                            // then update w[i] = w[i] - velocity * learning rate
+                            
+                            matrices[sigma][index][weight_column] = matrices[sigma][weight_column_index][weight_column] - (velocity * learning_rate);
+                            weight_column_index += 1;
 
+                        }
+                    }
+                }
+            }
+            println!(" Matrices {:?}",matrices); // displaying weight change after epoch of training data
+        }
+        
+        Ok((input,matrices))
+    }
+            
     
-
 }
 
 fn main() {
-    {}
+    let net = NeuralNet::new(3,vec![10,10,10]);
+    println!(" Node {:?}",net.hidden_layers);
+    println!(" Layers {:?}",net.nodes);
+    
+    
+    
+
     
 }
