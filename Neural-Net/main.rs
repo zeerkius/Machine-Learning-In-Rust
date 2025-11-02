@@ -1,3 +1,4 @@
+
 // vector of the number of hidden layers we want to utilize -> hidden_layers
 // the amount of nodes per layer will be any usize value
 use std::collections::HashSet;
@@ -24,7 +25,7 @@ impl NeuralNet{
     fn sigmoid(&self,x:f64) -> f64{
         1.0 / (1.0 + (-x).exp()) // dont hardcode e
     }
-    fn sse_sigmoid_gradient(&self,ground_truth:f64,prediction:f64,xi:f64) -> f64{
+    fn sse_sigmoid_gradient(&self,ground_truth:f64,prediction:f64 , xi:f64) -> f64{
         let delta : f64 = (ground_truth - prediction) * prediction * (1.0 - prediction) * xi;
         delta
     }
@@ -168,7 +169,7 @@ impl NeuralNet{
                         for c in (0..matrices.len()).rev(){
                             for d in (0..matrices[c].len()).rev(){
                                 for e in (0..matrices[c][d].len()).rev(){
-                                    let weight_gradient : f64 = self.sse_sigmoid_gradient(Y[j],input_track[a][b],matrices[c][d][e]);
+                                    let weight_gradient : f64 = self.sse_sigmoid_gradient(Y[j],input_track[a][b],input[a-1][b]); // fully connected
 
                                     velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
 
@@ -300,7 +301,7 @@ fn main() {
     let trained_weights = net.fit(train_vec,lung_cancer_train,8,0.5);
     let matrix_weights = trained_weights.unwrap().1;
     let predictions = predict(test_vec,matrix_weights);
-    println!(" Total Model Error {:?} ", predictions)
+    println!(" Total Model Error {:?} ", predictions);
     
     
 
@@ -311,4 +312,3 @@ fn main() {
     
  
 }
-
