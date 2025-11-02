@@ -1,3 +1,9 @@
+
+    
+
+
+    
+
 // This is a rust implementation of a Linear Regression Model
 // We need a struct to Define Training / Testing Data
 use std::collections::HashSet;
@@ -28,9 +34,9 @@ impl LRModel{
             Ok(dot_prod) // preferred return type
         }
     }
-    fn sse_gradient(&self,prediction : f64 , ground_truth : f64 , xi : f64) -> f64{
+    fn sse_gradient(&self,prediction : f64 , ground_truth : f64) -> f64{
         // we purposely omit the constant
-        let delta : f64 = (prediction - ground_truth) * xi;
+        let delta : f64 = (prediction - ground_truth);
         delta
     }
     
@@ -76,7 +82,7 @@ impl LRModel{
                 }else{
                     let mut yi : f64 = self.dot_product(&weight_vector,&X[j]).unwrap(); // point to values to avoid moving errors
                     for n in 0..length_input_vector{
-                        error_cache[n].push(self.sse_gradient(yi,Y[j],X[j][n]))
+                        error_cache[n].push(self.sse_gradient(yi,Y[j]))
                     }
                 }
             }
@@ -165,11 +171,4 @@ fn main() {
     let weights = model.fit(&train_vec,lung_cancer_train,150,31).unwrap();
     let lung_cancer_test : Vec<f64> = target(&test_vec);
     let res : Vec<f64> = model.predict(test_vec,lung_cancer_test,&weights);
-    
-    
-    
-
-
-    
-
 }
