@@ -1,4 +1,3 @@
-
 use std::collections::HashSet;
 use ordered_float::NotNan;
 use serde::Deserialize;
@@ -34,8 +33,8 @@ impl LogisticRegression{
         let sig : f64 = numerator / denominator;
         sig
     }
-    fn sigmoid_gradient(&self,prediction:f64,ground_truth:f64) -> f64{
-        let delta : f64 = (prediction - ground_truth) * prediction * (1.0 - prediction);
+    fn sigmoid_gradient(&self,prediction:f64,ground_truth:f64,xi:f64) -> f64{
+        let delta : f64 = (prediction - ground_truth) * prediction * (1.0 - prediction) * xi;
         delta
     }
     fn sse(&self,guess:f64 , prediction:f64) -> f64{
@@ -72,7 +71,7 @@ impl LogisticRegression{
                     let mut dot_prod : f64 = self.dot_product(&weight_vector,&X[j]).unwrap();
                     let mut sig_pred : f64 = self.sigmoid(dot_prod);
                     for k in 0..input_vector_length{
-                        let mut graident : f64 = self.sigmoid_gradient(sig_pred,Y[j]);
+                        let mut graident : f64 = self.sigmoid_gradient(sig_pred,Y[j],X[j][k]);
                         error_cache[k].push(graident);
                     }
                 }
@@ -163,5 +162,6 @@ fn main() {
     let lung_cancer_test : Vec<f64> = target(&test_vec);
     let res : Vec<f64> = model.predict(test_vec,lung_cancer_test,&weights);
 }
+
 
 
