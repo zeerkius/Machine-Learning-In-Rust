@@ -1,4 +1,3 @@
-
 // vector of the number of hidden layers we want to utilize -> hidden_layers
 // the amount of nodes per layer will be any usize value
 use std::collections::HashSet;
@@ -139,8 +138,8 @@ impl NeuralNet{
      */
     fn fit(&self,X:Vec<Vec<f64>>,Y:Vec<f64>,epochs : usize , weight_start : f64) -> Result<(Vec<Vec<f64>>,Vec<Vec<Vec<f64>>>),String>{
         
-        let learning_rate : f64 = 0.008;
-        let beta : f64 = 0.8;
+        let learning_rate : f64 = 0.00005;
+        let beta : f64 = 0.5;
         let mut velocity : f64 = 0.0;
         let network_shape : Vec<f64> = X[0].clone();
         let net = self.create_network(weight_start,network_shape).expect("Invalid Network Architecture");
@@ -154,10 +153,12 @@ impl NeuralNet{
         for i in 0..epochs{
             for j in 0..X.len(){
                 // full network pass
+                input_track.push(X[j].clone()); // we need to input the initial value so we can correctly avoid overflow
                 for k in 0..matrices.len(){
                     let ln= self.matrix_multiplication(matrices[k].clone(),X[j].clone()).expect("Invalid Size");
                     input_track.push(ln);
                 }
+                println!(" input track {:?}",input_track.len());
                 
                 let last_value = input_track[input_track.len()-1][0];
                 let model_error = self.sse(last_value,Y[j]);
@@ -169,7 +170,12 @@ impl NeuralNet{
                         for c in (0..matrices.len()).rev(){
                             for d in (0..matrices[c].len()).rev(){
                                 for e in (0..matrices[c][d].len()).rev(){
-                                    let weight_gradient : f64 = self.sse_sigmoid_gradient(Y[j],input_track[a][b],input[a-1][b]); // fully connected
+                                    if a == 0{
+                                        continue
+                                    }
+                                    
+                                    let t : usize = a - 1;
+                                    let weight_gradient : f64 = self.sse_sigmoid_gradient(Y[j],input_track[a][b],input_track[t][b]); // fully connected
 
                                     velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
 
@@ -177,14 +183,16 @@ impl NeuralNet{
 
                                     matrices[c][d][e] = matrices[c][d][e] - (velocity * learning_rate); // inplace update
                                     
+                                    
                                 }
                             }
                         }
                     }
                 }
+                input_track.clear()
             }
             println!(" Matrices {:?}",matrices); // displaying weight change after epoch of training data
-            input_track.clear()
+            
         }
         
         Ok((input,matrices))
@@ -298,7 +306,7 @@ fn main() {
     let test_vec = load_csv("src/test.csv").expect("Error Loading File");
     let net = NeuralNet::new(3,vec![10,10,10]);
     let lung_cancer_train : Vec<f64> = target(&train_vec);
-    let trained_weights = net.fit(train_vec,lung_cancer_train,8,0.5);
+    let trained_weights = net.fit(train_vec,lung_cancer_train,100,0.5);
     let matrix_weights = trained_weights.unwrap().1;
     let predictions = predict(test_vec,matrix_weights);
     println!(" Total Model Error {:?} ", predictions);
