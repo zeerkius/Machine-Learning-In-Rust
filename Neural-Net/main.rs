@@ -174,7 +174,7 @@ impl NeuralNet{
                                         continue
                                     }
                                     
-                                    let t : usize = a - 1;
+                                    let t : usize = a - 1; // <- pointer to previous layer
                                     let weight_gradient : f64 = self.sse_sigmoid_gradient(Y[j],input_track[a][b],input_track[t][b]); // fully connected
 
                                     velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
