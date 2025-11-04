@@ -24,11 +24,41 @@ impl NeuralNet{
     fn sigmoid(&self,x:f64) -> f64{
         1.0 / (1.0 + (-x).exp()) // dont hardcode e
     }
+    fn relu(&self,x:f64) -> f64{
+        if x <= 0.0{
+            0.0
+        }else{
+            x
+        }
+    }
+    fn sse_relu_gradient(&self,ground_truth:f64,prediction:f64,xi:f64)-> f64{
+        (prediction - ground_truth) * xi
+    }
     fn sse_sigmoid_gradient(&self,ground_truth:f64,prediction:f64 , xi:f64) -> f64{
-        let delta : f64 = (ground_truth - prediction) * prediction * (1.0 - prediction) * xi;
+        let delta : f64 = (prediction - ground_truth) * prediction * (1.0 - prediction) * xi;
         delta
     }
     fn matrix_multiplication(&self,matrix:Vec<Vec<f64>>,vector:Vec<f64>) -> Result<Vec<f64>,String>{
+        // vector : (dim 1 * m) -> u , weight_matrix : (dim m * n) -> A
+        // Multiply[vector * A^T]  : (dim 1 * n) -> v
+        let m : usize = matrix.len();
+        let n : usize = matrix[0].len(); // dimensions of the weight matrix
+        let h : usize = vector.len();  // dimensions of the input vector
+        //
+        if h != m {
+            return Err("invalid matrix sizes , must be of size (1, m) X (m ,n)".to_string());
+        }
+        let mut res_vector : Vec<f64> = Vec::new();
+        for i in 0..n{
+            let mut ui : f64 = 0.0;
+            for j in 0..vector.len(){
+                ui += (vector[j] * matrix[j][i]);
+            }
+            res_vector.push(ui); // strictly for network creation
+        }
+        Ok(res_vector)
+    }
+    fn matrix_multiplication_sigmoid(&self,matrix:Vec<Vec<f64>>,vector:Vec<f64>) -> Result<Vec<f64>,String>{
         // vector : (dim 1 * m) -> u , weight_matrix : (dim m * n) -> A
         // Multiply[vector * A^T]  : (dim 1 * n) -> v
         let m : usize = matrix.len();
@@ -45,6 +75,26 @@ impl NeuralNet{
                 ui += (vector[j] * matrix[j][i]);
             }
             res_vector.push(self.sigmoid(ui)); // every single perceptron will have a sigmoid activation
+        }
+        Ok(res_vector)
+    }
+    fn matrix_multiplication_relu(&self,matrix:Vec<Vec<f64>>,vector:Vec<f64>) -> Result<Vec<f64>,String>{
+        // vector : (dim 1 * m) -> u , weight_matrix : (dim m * n) -> A
+        // Multiply[vector * A^T]  : (dim 1 * n) -> v
+        let m : usize = matrix.len();
+        let n : usize = matrix[0].len(); // dimensions of the weight matrix
+        let h : usize = vector.len();  // dimensions of the input vector
+        //
+        if h != m {
+            return Err("invalid matrix sizes , must be of size (1, m) X (m ,n)".to_string());
+        }
+        let mut res_vector : Vec<f64> = Vec::new();
+        for i in 0..n{
+            let mut ui : f64 = 0.0;
+            for j in 0..vector.len(){
+                ui += (vector[j] * matrix[j][i]);
+            }
+            res_vector.push(self.relu(ui)); // every single perceptron will have a relu activation
         }
         Ok(res_vector)
     }
@@ -136,10 +186,10 @@ impl NeuralNet{
         
     }
      */
-    fn fit(&self,X:Vec<Vec<f64>>,Y:Vec<f64>,epochs : usize , weight_start : f64) -> Result<(Vec<Vec<f64>>,Vec<Vec<Vec<f64>>>),String>{
+    fn fit(&self,X:Vec<Vec<f64>>,Y:Vec<f64>,epochs : usize , weight_start : f64 , activation :&str) -> Result<(Vec<Vec<f64>>,Vec<Vec<Vec<f64>>>),String>{
         
-        let learning_rate : f64 = 0.00005;
-        let beta : f64 = 0.5;
+        let learning_rate : f64 = 0.000005;
+        let beta : f64 = 0.1;
         let mut velocity : f64 = 0.0;
         let network_shape : Vec<f64> = X[0].clone();
         let net = self.create_network(weight_start,network_shape).expect("Invalid Network Architecture");
@@ -150,46 +200,64 @@ impl NeuralNet{
         if input.len() != matrices.len(){
             return Err("Cannot compute Network".to_string());
         }
+        if activation != "relu" && activation != "sigmoid"{
+            return Err("Invalid activation".to_string());
+        }
         for i in 0..epochs{
             for j in 0..X.len(){
                 // full network pass
                 input_track.push(X[j].clone()); // we need to input the initial value so we can correctly avoid overflow
                 for k in 0..matrices.len(){
-                    let ln= self.matrix_multiplication(matrices[k].clone(),X[j].clone()).expect("Invalid Size");
-                    input_track.push(ln);
+                    if activation == "sigmoid"{
+                        let ln= self.matrix_multiplication_sigmoid(matrices[k].clone(),X[j].clone()).expect("Invalid Size");
+                        input_track.push(ln);
+                    }else{
+                        let ln= self.matrix_multiplication_relu(matrices[k].clone(),X[j].clone()).expect("Invalid Size");
+                        input_track.push(ln);
+                    }
                 }
                 println!(" input track {:?}",input_track.len());
                 
                 let last_value = input_track[input_track.len()-1][0];
                 let model_error = self.sse(last_value,Y[j]);
                 println!(" Current Model Error {:?} ",model_error);
-                
-                // full back propagation
-                for a in (0..input_track.len()).rev(){
-                    for b in (0..input_track[a].len()).rev(){
-                        for c in (0..matrices.len()).rev(){
-                            for d in (0..matrices[c].len()).rev(){
-                                for e in (0..matrices[c][d].len()).rev(){
-                                    if a == 0{
-                                        continue
+
+                if model_error > 0.00001{
+                    // full back propagation
+                    for a in (0..input_track.len()).rev(){
+                        for b in (0..input_track[a].len()).rev(){
+                            for c in (0..matrices.len()).rev(){
+                                for d in (0..matrices[c].len()).rev(){
+                                    for e in (0..matrices[c][d].len()).rev(){
+                                        if a == 0{
+                                            continue // skipping first layer because there is no previous layer
+                                        }
+
+                                        let t : usize = a - 1; // <- pointer to previous layer
+                                        if activation == "sigmoid"{
+                                            let weight_gradient : f64 = self.sse_sigmoid_gradient(Y[j],input_track[a][b],input_track[t][b]); // fully connected
+                                            velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
+
+                                            // then update w[i] = w[i] - velocity * learning rate
+
+                                            matrices[c][d][e] = matrices[c][d][e] - (velocity * learning_rate); // inplace update
+                                        }else{
+                                            let weight_gradient : f64 = self.sse_relu_gradient(Y[j],input_track[a][b],input_track[t][b]); // fully connected
+                                            velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
+
+                                            // then update w[i] = w[i] - velocity * learning rate
+
+                                            matrices[c][d][e] = matrices[c][d][e] - (velocity * learning_rate); // inplace update
+                                        }
                                     }
-                                    
-                                    let t : usize = a - 1; // <- pointer to previous layer
-                                    let weight_gradient : f64 = self.sse_sigmoid_gradient(Y[j],input_track[a][b],input_track[t][b]); // fully connected
-
-                                    velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
-
-                                    // then update w[i] = w[i] - velocity * learning rate
-
-                                    matrices[c][d][e] = matrices[c][d][e] - (velocity * learning_rate); // inplace update
-                                    
-                                    
                                 }
                             }
                         }
                     }
+                    input_track.clear()
+                }else{
+                    input_track.clear()
                 }
-                input_track.clear()
             }
             println!(" Matrices {:?}",matrices); // displaying weight change after epoch of training data
             
@@ -246,7 +314,13 @@ fn load_csv(file:&str) -> Result<Vec<Vec<f64>>,Box<dyn Error>>{
 fn sigmoid(x:f64) -> f64{
     1.0 / (1.0 + (-x).exp()) // dont hardcode e
 }
-
+fn relu(x:f64) -> f64{
+    if x <= 0.0{
+        0.0
+    }else{
+        x
+    }
+}
 fn target(X:&Vec<Vec<f64>>) -> Vec<f64>{
     let row_len : usize = X[0].len();
     // transpose to get the vectors column wise
@@ -262,7 +336,10 @@ fn sse(x:f64,y:f64) -> f64{
     (x - y).powi(2)
 }
 
-fn matrix_multiplication(matrix:Vec<Vec<f64>>,vector:Vec<f64>) -> Result<Vec<f64>,String>{
+fn matrix_multiplication_testing(matrix:Vec<Vec<f64>>,vector:Vec<f64>,activation:&str) -> Result<Vec<f64>,String>{
+    if activation != "sigmoid" && activation != "relu"{
+        return Err("Invalid testing activation".to_string());
+    }
     // vector : (dim 1 * m) -> u , weight_matrix : (dim m * n) -> A
     // Multiply[vector * A^T]  : (dim 1 * n) -> v
     let m : usize = matrix.len();
@@ -278,24 +355,32 @@ fn matrix_multiplication(matrix:Vec<Vec<f64>>,vector:Vec<f64>) -> Result<Vec<f64
         for j in 0..vector.len(){
             ui += (vector[j] * matrix[j][i]);
         }
-        res_vector.push(sigmoid(ui)); // every single perceptron will have a sigmoid activation
+        if activation == "sigmoid"{
+            res_vector.push(sigmoid(ui)); // every single perceptron will have a sigmoid activation
+        }else{
+            res_vector.push(relu(ui)); // every single perceptron will have a relu activation for testing
+        }
+
     }
     Ok(res_vector)
 }
 
-fn predict(X:Vec<Vec<f64>> ,matrices:Vec<Vec<Vec<f64>>>)->f64{
+fn predict(X:Vec<Vec<f64>> ,matrices:Vec<Vec<Vec<f64>>>,act_function:&str)->f64{
     let y_vals = target(&X);
+    let vals : Vec<f64> = y_vals.clone();
     let mut start : usize = 0;
     let mut err : Vec<f64> = Vec::new();
     let mut final_matrix : Vec<f64> = Vec::new();
-    for k in 0..matrices.len(){
-        let ln= matrix_multiplication(matrices[k].clone(),X[start].clone()).expect("Invalid Size");
-        final_matrix = ln;
+    for j in y_vals{
+        for k in 0..matrices.len(){
+            let ln= matrix_multiplication_testing(matrices[k].clone(),X[start].clone(),act_function.clone()).expect("Invalid Size");
+            final_matrix = ln;
+        }
+        println!(" Model Prediction {:?}",final_matrix[0]);
+        let e : f64 = sse(final_matrix[0],vals[start]);
+        start += 1;
+        err.push(e);
     }
-    let e : f64 = sse(final_matrix[0],y_vals[start]);
-    start += 1;
-    err.push(e);
-    
     err.iter().sum()
 }
 
@@ -304,11 +389,11 @@ fn predict(X:Vec<Vec<f64>> ,matrices:Vec<Vec<Vec<f64>>>)->f64{
 fn main() {
     let train_vec = load_csv("src/train.csv").expect("Error Loading File");
     let test_vec = load_csv("src/test.csv").expect("Error Loading File");
-    let net = NeuralNet::new(3,vec![10,10,10]);
+    let net = NeuralNet::new(5,vec![9,9,9,9,9]);
     let lung_cancer_train : Vec<f64> = target(&train_vec);
-    let trained_weights = net.fit(train_vec,lung_cancer_train,100,0.5);
+    let trained_weights = net.fit(train_vec,lung_cancer_train,5,0.000000001,"relu");
     let matrix_weights = trained_weights.unwrap().1;
-    let predictions = predict(test_vec,matrix_weights);
+    let predictions = predict(test_vec,matrix_weights,"relu");
     println!(" Total Model Error {:?} ", predictions);
     
     
