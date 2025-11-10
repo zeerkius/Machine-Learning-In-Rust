@@ -236,14 +236,14 @@ impl NeuralNet{
                                         let t : usize = a - 1; // <- pointer to previous layer
                                         if activation == "sigmoid"{
                                             let weight_gradient : f64 = self.sse_sigmoid_gradient(Y[j],input_track[a][b],input_track[t][b]); // fully connected
-                                            velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
+                                            velocity += (beta * velocity) + (1.0 - beta) * weight_gradient;
 
                                             // then update w[i] = w[i] - velocity * learning rate
 
                                             matrices[c][d][e] = matrices[c][d][e] - (velocity * learning_rate); // inplace update
                                         }else{
                                             let weight_gradient : f64 = self.sse_relu_gradient(Y[j],input_track[a][b],input_track[t][b]); // fully connected
-                                            velocity = (beta * velocity) + (1.0 - beta) * weight_gradient;
+                                            velocity += (beta * velocity) + (1.0 - beta) * weight_gradient;
 
                                             // then update w[i] = w[i] - velocity * learning rate
 
