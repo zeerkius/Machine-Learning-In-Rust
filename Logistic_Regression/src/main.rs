@@ -64,7 +64,7 @@ impl LogisticRegression{
                     println!("Current Weights,{:?}",weight_vector);
                     for k in 0..input_vector_length{
                         let mut sum : f64 = error_cache[k].iter().sum();
-                        velocity = (beta * velocity) +  (1.0 - beta) * sum;
+                        velocity += (beta * velocity) +  (1.0 - beta) * sum;
                         weight_vector[k] -= velocity * learning_rate;
                     }
                 }else{
