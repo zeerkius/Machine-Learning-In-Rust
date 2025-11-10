@@ -69,7 +69,7 @@ impl LRModel{
                     println!("Current Weights {:?}",weight_vector);
                     for k in 0..length_input_vector{
                         let mut sum : f64 = error_cache[k].iter().sum(); // avoid type ref
-                        velocity += (beta * velocity) +  (1.0 - beta) * sum;
+                        velocity = (beta * velocity) +  (1.0 - beta) * sum;
                         weight_vector[k] -= velocity * learning_rate
                     }
                     let mut error_cache : Vec<Vec<i32>> = (0..length_input_vector).map(|_| Vec::new()).collect(); //shadows and avoids moving errors
