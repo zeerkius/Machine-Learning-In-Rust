@@ -155,8 +155,8 @@ fn target(X:&Vec<Vec<f64>>) -> Vec<f64>{
 fn main() {
     // Needs testing with loading data
     let model = LogisticRegression;
-    let train_vec = load_csv("src/train.csv").expect("Error Loading File");
-    let test_vec = load_csv("src/test.csv").expect("Error Loading File");
+    let train_vec = load_csv("model_validation_dataset/src/train.csv").expect("Error Loading File");
+    let test_vec = load_csv("model_validation_dataset/src/test.csv").expect("Error Loading File");
     let lung_cancer_train : Vec<f64> = target(&train_vec);
     let weights = model.fit(&train_vec,lung_cancer_train,150,33).unwrap();
     let lung_cancer_test : Vec<f64> = target(&test_vec);
